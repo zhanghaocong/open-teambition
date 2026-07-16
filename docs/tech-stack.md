@@ -128,6 +128,7 @@ apps/
   agent/         # PM Agent：response(live query) + 对话式，作为 principal 调用 core
 docs/
   tech-stack.md
+  permission-model.md   # 权限模型(资源树/自定义角色/字段级/自定义字段)
 ```
 > `cli` / `mcp` / `agent` 均不含业务逻辑，只做协议转换。
 
