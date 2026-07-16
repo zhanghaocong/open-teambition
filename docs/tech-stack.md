@@ -127,7 +127,7 @@ apps/
   mcp/           # 注册表 → MCP server 适配器
   agent/         # PM Agent：response(live query) + 对话式，作为 principal 调用 core
 docs/
-  技术选型.md
+  tech-stack.md
 ```
 > `cli` / `mcp` / `agent` 均不含业务逻辑，只做协议转换。
 
