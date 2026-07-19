@@ -18,9 +18,9 @@
 
 ## Terminology Cross-Reference
 
-两份领域文档中的概念对应关系：
+两份领域文档中的概念对应关系。**DB schema 以 permission-model.md 为准。**
 
-| data-model.md | permission-model.md | 说明 |
+| data-model.md（领域概念） | permission-model.md（DB 表/列） | 说明 |
 |---|---|---|
 | `workspace` | 资源树根节点（`type: workspace`） | 租户边界 |
 | `project` | `type: project` 资源节点 | 项目实例 |
@@ -30,4 +30,6 @@
 | `principal` | `principals` 表 | 统一主体（user / agent / service） |
 | `api-token` | `api_tokens` 表 | PAT + scope |
 | `audit-event` | `audit_events` 表 | 写操作审计 |
-| ULID（领域 ID） | UUID（SQL 示例） | 实现层可统一为 ULID 文本存储 |
+| `due_at`（内置列） | `tasks.due_at` | 任务截止日期 |
+| — | `roles` / `permission_points` / `grants` | 授权子系统（data-model 不重复建模） |
+| UUID | UUID（`gen_random_uuid()`） | 全局 ID 策略；ltree label 用去连字符 uuid |

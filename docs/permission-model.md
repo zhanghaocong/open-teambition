@@ -23,16 +23,18 @@ Web / CLI / MCP / Agent 四类入口的鉴权全部复用它。
 
 ### Terminology Mapping
 
-本文 SQL 示例与 [data-model.md](./data-model.md) 的对应关系：
+本文 SQL 示例与 [data-model.md](./data-model.md) 的对应关系。**本文 DB schema 为全局权威来源。**
 
-| data-model | 本文 | 说明 |
+| data-model（领域概念） | 本文（DB 表/列） | 说明 |
 |---|---|---|
 | `field-definition` | `custom_fields` 表 | 字段 schema，含 `read_point` / `write_point` |
 | `field-value` | `custom_field_values` 表 | 字段实例值 |
 | `workspace` | 资源树根节点 | `type = 'workspace'` |
 | `project` | 资源树中间节点 | `type = 'project'` |
 | `task` | 资源树叶子节点 | `type = 'task'` |
-| ULID | UUID（SQL 示例） | 领域层用 ULID；SQL 示例沿用 UUID 以兼容 PG 原生类型 |
+| `due_at`（内置列） | `tasks.due_at` | 任务截止日期 |
+| — | `roles` / `permission_points` / `grants` | 授权子系统 |
+| UUID | UUID（`gen_random_uuid()`） | 全局 ID 策略；ltree label 用去连字符 uuid |
 
 ## 2. Core Concepts
 
@@ -354,3 +356,4 @@ function useCanField(resourceRef: string, type: string, field: FieldDef, action:
 |---|---|
 | 2026-07-19 | 初稿 |
 | 2026-07-19 | 对齐 data-model 术语（workspace、field-definition/field-value、status_id） |
+| 2026-07-19 | 确立为 DB schema 权威来源；统一 UUID、`due_at`、`custom_fields`/`custom_field_values` |
