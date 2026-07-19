@@ -5,7 +5,7 @@
 >
 > 相关文档：[tech-stack.md](./tech-stack.md) · [permission-model.md](./permission-model.md)
 >
-> **DB schema 以 [permission-model.md](./permission-model.md) 为准**（表名、列名、ID 类型）。本文档中的 `field-definition` / `field-value` 为领域概念名，落库分别对应 `custom_fields` / `custom_field_values` 表。
+> **命名约定**：领域模型名与 DB 表名一致（`custom_fields`、`custom_field_values` 等 snake_case）。DB schema 以 [permission-model.md](./permission-model.md) 为准。
 
 ## 1. Design Principles
 
@@ -15,8 +15,8 @@
 
 | 层 | 职责 | 核心模型 |
 |---|---|---|
-| **元数据层（Schema）** | 定义「能有什么、怎么流转、有哪些字段」 | `project-meta`, `task-meta`, `field-type`, `field-definition`, `workflow`, `status`, `transition` |
-| **实例层（Runtime）** | 存储真实业务数据 | `workspace`, `project`, `task`, `field-value` |
+| **元数据层（Schema）** | 定义「能有什么、怎么流转、有哪些字段」 | `project-meta`, `task-meta`, `field-type`, `custom_fields`, `workflow`, `status`, `transition` |
+| **实例层（Runtime）** | 存储真实业务数据 | `workspace`, `project`, `task`, `custom_field_values` |
 
 类比：Jira Issue Type Scheme、Salesforce Object Metadata、Teambition 项目模板。
 
@@ -37,16 +37,16 @@
 ```
 field-type（类型能力注册）
     ↓
-field-definition（在 project-meta / task-meta 上声明）
+custom_fields（在 project-meta / task-meta 上声明）
     ↓
-field-value（挂在 project / task 实例上的值）
+custom_field_values（挂在 project / task 实例上的值）
 ```
 
 | 概念 | 说明 |
 |---|---|
 | `field-type` | 类型注册表：定义值结构、配置结构、校验与查询能力 |
-| `field-definition` | 在某类 project / task 上声明字段：key、类型、必填、选项等；落库为 `custom_fields` |
-| `field-value` | 具体实例上的字段值；落库为 `custom_field_values` |
+| `custom_fields` | 在某类 project / task 上声明字段：key、类型、必填、选项等 |
+| `custom_field_values` | 具体实例上的字段值 |
 
 > 表结构详见 [permission-model.md §4](./permission-model.md#4-database-schema)。
 
@@ -138,9 +138,9 @@ graph TB
 | 模型 | 说明 | MVP |
 |---|---|---|
 | `project-meta` | 项目模板：类型、默认工作流、支持的 task-meta、项目级字段 | 是 |
-| `task-meta` | 任务类型定义：名称、图标、关联的 field-definition | 是 |
+| `task-meta` | 任务类型定义：名称、图标、关联的 custom_fields | 是 |
 | `field-type` | 字段类型注册表（见第 4 节） | 是 |
-| `custom_fields` | 字段 schema（领域概念 `field-definition`）：key、类型、配置、必填、默认值 | 是 |
+| `custom_fields` | 字段 schema：key、类型、配置、必填、默认值 | 是 |
 | `workflow` | 工作流定义 | 是 |
 | `status` | 状态节点：名称、顺序、颜色、是否终态 | 是 |
 | `transition` | 状态流转边：from → to | 是 |
@@ -164,14 +164,14 @@ graph TB
 | 模型 | 说明 | MVP |
 |---|---|---|
 | `task` | 任务实例（含内置列，见第 5 节） | 是 |
-| `custom_field_values` | 任务 / 项目实例上的字段值（领域概念 `field-value`） | 是 |
+| `custom_field_values` | 任务 / 项目实例上的字段值 | 是 |
 
 ### 3.5 Models That Stay Independent (Not Fields)
 
 | 模型 | 不作为 field 的原因 | 阶段 |
 |---|---|---|
 | `workflow` / `status` / `transition` | 状态机是横切规则，不是普通属性值 | MVP |
-| `comment` | 时序流、富文本、@提及，语义不同于 field-value | 二期 |
+| `comment` | 时序流、富文本、@提及，语义不同于 `custom_field_values` | 二期 |
 | `task-relation` | 图结构查询（阻塞链）频繁；后期可用 `field-type: relation` 统一 | 二期 |
 | `view` / `board-column` | UI 配置，不是业务属性 | MVP |
 | `notification` | 推送通道，横切关注点 | 二期 |
@@ -211,14 +211,14 @@ interface FieldType {
 }
 ```
 
-每个 `field-definition` 可配置 `read_point` / `write_point` 权限点（为空则回退实体级权限），详见 [permission-model.md §7](./permission-model.md#7-field-level-authorization)。
+每个 `custom_fields` 可配置 `read_point` / `write_point` 权限点（为空则回退实体级权限），详见 [permission-model.md §7](./permission-model.md#7-field-level-authorization)。
 
 ### 4.3 tag
 
 不需要独立 `tag` 表。
 
 ```ts
-// field-definition
+// custom_fields
 {
   key: "labels",
   type: "tag",
@@ -229,7 +229,7 @@ interface FieldType {
   }
 }
 
-// field-value
+// custom_field_values
 { value: ["bug", "p0", "backend"] }
 ```
 
@@ -238,7 +238,7 @@ interface FieldType {
 不需要独立 `attachment` 表。
 
 ```ts
-// field-definition
+// custom_fields
 {
   key: "files",
   type: "attachment",
@@ -249,7 +249,7 @@ interface FieldType {
   }
 }
 
-// field-value
+// custom_field_values
 {
   value: [
     { fileId: "f_01", name: "spec.pdf", mime: "application/pdf", size: 102400 }
@@ -266,14 +266,14 @@ interface FieldType {
 **项目级：迭代目录（catalog 模式）**
 
 ```ts
-// field-definition（scope: project）
+// custom_fields（scope: project）
 {
   key: "sprints",
   type: "sprint",
   config: { mode: "catalog" }
 }
 
-// field-value（挂在 project 上）
+// custom_field_values（挂在 project 上）
 {
   value: [
     { id: "sp_1", name: "Sprint 1", start: "2026-07-01", end: "2026-07-14" },
@@ -285,7 +285,7 @@ interface FieldType {
 **任务级：迭代归属（ref 模式）**
 
 ```ts
-// field-definition（scope: task）
+// custom_fields（scope: task）
 {
   key: "sprint",
   type: "sprint",
@@ -296,7 +296,7 @@ interface FieldType {
   }
 }
 
-// field-value（挂在 task 上）
+// custom_field_values（挂在 task 上）
 { value: "sp_1" }   // 或 null（backlog）
 ```
 
@@ -327,13 +327,13 @@ interface FieldType {
 | `tag` | field-type | 非所有项目必需，语义可多个 |
 | `attachment` | field-type | 非所有任务有附件 |
 | `sprint` | field-type | 仅敏捷项目使用；可能有 release / milestone 等其他迭代维度 |
-| 其他自定义属性 | field-type + field-value | 由 field-definition 驱动 |
+| 其他自定义属性 | field-type + custom_field_values | 由 custom_fields 驱动 |
 
 ### 5.3 status Hybrid Approach
 
 `status` 采用 **语义 field + 存储内置列**：
 
-- 对外：可通过 `field-definition` 声明为 `field-type: status`
+- 对外：可通过 `custom_fields` 声明为 `field-type: status`
 - 对内：`task.status_id` 冗余存储，工作流引擎直接读写
 - 避免看板拖拽每次 join `custom_field_values` 表
 
@@ -351,7 +351,7 @@ interface FieldType {
 project-meta
   ├── task-meta[]              # 本项目支持的任务类型
   ├── workflow                 # 默认工作流
-  ├── field-definition[]       # 项目级自定义字段
+  ├── custom_fields[]       # 项目级自定义字段
   └── default-view             # 默认视图配置
 ```
 
@@ -361,9 +361,9 @@ project-meta
 - 创建 `project` 时，从 `project-meta` **快照复制**配置到项目级
 - 修改模板**不影响**已建 project
 
-### 6.3 task-meta and field-definition
+### 6.3 task-meta and custom_fields
 
-多对多关系，通过 `task-meta-field-binding` 关联（可 per-type 覆盖必填、默认值、可见性）。
+多对多关系，通过 `custom_field_bindings` 关联（可 per-type 覆盖必填、默认值、可见性）。
 
 ### 6.4 Workflow Scope
 
@@ -404,7 +404,7 @@ workspace
 与 [permission-model.md §4](./permission-model.md#4-database-schema) 保持一致：
 
 ```sql
--- 字段定义（领域概念 field-definition）
+-- custom_fields
 create table custom_fields (
   id                uuid primary key default gen_random_uuid(),
   scope_resource_id uuid not null references resources(id) on delete cascade,
@@ -418,7 +418,7 @@ create table custom_fields (
   unique (scope_resource_id, applies_to, key)
 );
 
--- 字段值（领域概念 field-value）
+-- custom_field_values
 create table custom_field_values (
   entity_id       uuid references resources(id) on delete cascade,
   custom_field_id uuid references custom_fields(id) on delete cascade,
@@ -465,9 +465,9 @@ WHERE cf.key = 'sprint'
 
 ```
 Platform (7):  workspace, user, principal, api-token, audit-event, domain-event, stored-file
-Schema (7):    project-meta, task-meta, field-type, custom-fields, workflow, status, transition
+Schema (7):    project-meta, task-meta, field-type, custom_fields, workflow, status, transition
 Project (5):   project, workspace-member, project-member, view, board-column
-Task (2):      task, custom-field-values
+Task (2):      task, custom_field_values
 ```
 
 授权子系统（permission-model，不计入上表）：
@@ -499,9 +499,9 @@ transition-rule, comment, task-relation, notification, invitation, relation
 ```
 packages/core/src/domain/
   platform/       # workspace, user, principal, token, audit, event, stored-file
-  schema/         # project-meta, task-meta, field-type, custom-fields, workflow, status, transition
+  schema/         # project-meta, task-meta, field-type, custom_fields, workflow, status, transition
   project/        # project, member, view, board-column
-  task/           # task, custom-field-values
+  task/           # task, custom_field_values
   capability/     # Capability Registry
   auth/           # resources, roles, grants（见 permission-model）
 
@@ -564,4 +564,4 @@ erDiagram
 |---|---|
 | 2026-07-16 | 初稿：meta/instance 分层、field 体系、内置列策略 |
 | 2026-07-19 | 重命名为 `data-model.md`，对齐权限模型术语 |
-| 2026-07-19 | 跨文档对齐：以 permission-model 为准（UUID、`due_at`、`custom_fields`/`custom_field_values`、授权子系统） |
+| 2026-07-19 | 全局统一命名：`custom_fields` / `custom_field_values`（概念名 = 表名） |
