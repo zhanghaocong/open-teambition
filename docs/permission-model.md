@@ -21,18 +21,18 @@ can(principal, permission_point, resource) -> boolean
 
 Web / CLI / MCP / Agent 四类入口的鉴权全部复用它。
 
-### Terminology Mapping
+### Shared Naming
 
-本文 SQL 示例与 [data-model.md](./data-model.md) 的对应关系：
+领域模型名与 DB 表名一致（snake_case）。本文为 DB schema 权威来源。
 
-| data-model | 本文 | 说明 |
-|---|---|---|
-| `field-definition` | `custom_fields` 表 | 字段 schema，含 `read_point` / `write_point` |
-| `field-value` | `custom_field_values` 表 | 字段实例值 |
-| `workspace` | 资源树根节点 | `type = 'workspace'` |
-| `project` | 资源树中间节点 | `type = 'project'` |
-| `task` | 资源树叶子节点 | `type = 'task'` |
-| ULID | UUID（SQL 示例） | 领域层用 ULID；SQL 示例沿用 UUID 以兼容 PG 原生类型 |
+| 模型 / 列 | 说明 |
+|---|---|
+| `custom_fields` | 字段 schema，含 `read_point` / `write_point` |
+| `custom_field_values` | 字段实例值 |
+| `workspace` / `project` / `task` | 资源树节点（`resources` 表） |
+| `tasks.due_at` | 任务截止日期（内置列） |
+| `roles` / `permission_points` / `grants` | 授权子系统 |
+| UUID（`gen_random_uuid()`） | 全局 ID 策略；ltree label 用去连字符 uuid |
 
 ## 2. Core Concepts
 
@@ -138,7 +138,7 @@ create table grants (
 );
 create index on grants (principal_id, resource_id);
 
--- 字段定义（= data-model 中的 field-definition）
+-- custom_fields
 create table custom_fields (
   id                uuid primary key default gen_random_uuid(),
   scope_resource_id uuid not null references resources(id) on delete cascade,
@@ -152,7 +152,7 @@ create table custom_fields (
   unique (scope_resource_id, applies_to, key)
 );
 
--- 字段值（= data-model 中的 field-value）
+-- custom_field_values
 create table custom_field_values (
   entity_id       uuid references resources(id) on delete cascade,
   custom_field_id uuid references custom_fields(id) on delete cascade,
@@ -264,13 +264,13 @@ where g.principal_id = :P and g.resource_id = any(:ancestorIds)
 - **实体写** 过 `task.update` 网关 → 对入参里实际改动的字段逐个按 `write_point` 把关。
 
 ```ts
-const fieldReadPoint  = (type: string, f: FieldDef) => f.readPoint  ?? `${type}.read`;
-const fieldWritePoint = (type: string, f: FieldDef) => f.writePoint ?? `${type}.update`;
+const fieldReadPoint  = (type: string, f: CustomField) => f.readPoint  ?? `${type}.read`;
+const fieldWritePoint = (type: string, f: CustomField) => f.writePoint ?? `${type}.update`;
 
-export async function redactForRead(db, actor, type, entityRef, entity, fields: FieldDef[]) {
+export async function redactForRead(db, actor, type, entityRef, entity, fields: CustomField[]) {
   const points = await effectivePoints(db, actor, entityRef);
   for (const f of fields)
-    if (!matchPoint(points, fieldReadPoint(type, f))) delete entity.customFields[f.key];
+    if (!matchPoint(points, fieldReadPoint(type, f))) delete entity.custom_field_values[f.key];
   return entity;
 }
 
@@ -302,7 +302,7 @@ export function matchPoint(patterns: string[], required: string): boolean {
 ```
 
 ```tsx
-function useCanField(resourceRef: string, type: string, field: FieldDef, action: 'read'|'write') {
+function useCanField(resourceRef: string, type: string, field: CustomField, action: 'read'|'write') {
   const { data: points = [] } = usePermissions(resourceRef);
   return matchPoint(points, pointForField(type, field, action));
 }
@@ -353,4 +353,4 @@ function useCanField(resourceRef: string, type: string, field: FieldDef, action:
 | Date | Change |
 |---|---|
 | 2026-07-19 | 初稿 |
-| 2026-07-19 | 对齐 data-model 术语（workspace、field-definition/field-value、status_id） |
+| 2026-07-19 | 全局统一命名：`custom_fields` / `custom_field_values`（概念名 = 表名） |
