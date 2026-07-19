@@ -1,11 +1,13 @@
-# open-teambition 数据建模规划
+# open-teambition Data Model
 
-> 本文档记录领域模型的拆分、实体关系与关键设计决策。
+> 领域模型的拆分、实体关系与关键设计决策。
 > 状态：**草案（待评审）**。
+>
+> 相关文档：[tech-stack.md](./tech-stack.md) · [permission-model.md](./permission-model.md)
 
-## 1. 设计理念
+## 1. Design Principles
 
-### 1.1 元数据层 vs 实例层
+### 1.1 Schema Layer vs Runtime Layer
 
 采用 **「Schema 定义能力，Runtime 存储数据」** 的双层结构：
 
@@ -16,7 +18,7 @@
 
 类比：Jira Issue Type Scheme、Salesforce Object Metadata、Teambition 项目模板。
 
-### 1.2 属性驱动：一切皆 Field
+### 1.2 Field-Driven: Everything Is a Field
 
 业务语义优先表达为 **字段类型（field-type）**，而非每种语义单独建业务表。
 
@@ -28,7 +30,7 @@
 
 新增业务能力 = 注册新 field-type，无需改表结构。
 
-### 1.3 字段三段式
+### 1.3 Field Three-Tier Model
 
 ```
 field-type（类型能力注册）
@@ -44,13 +46,15 @@ field-value（挂在 project / task 实例上的值）
 | `field-definition` | 在某类 project / task 上声明字段：key、类型、必填、选项等 |
 | `field-value` | 具体实例上的字段值 |
 
+> 在权限模型中，`field-definition` 对应 `custom_fields` 表，`field-value` 对应 `custom_field_values` 表。详见 [permission-model.md](./permission-model.md)。
+
 ---
 
-## 2. 分层架构
+## 2. Layered Architecture
 
 ```mermaid
 graph TB
-    subgraph L0["L0 平台基座"]
+    subgraph L0["L0 Platform"]
         WS[workspace]
         U[user]
         P[principal]
@@ -60,7 +64,7 @@ graph TB
         SF[stored-file]
     end
 
-    subgraph L1["L1 元数据注册表"]
+    subgraph L1["L1 Schema Registry"]
         PM[project-meta]
         TM[task-meta]
         FT[field-type]
@@ -70,7 +74,7 @@ graph TB
         TR[transition]
     end
 
-    subgraph L2["L2 项目运行时"]
+    subgraph L2["L2 Project Runtime"]
         PR[project]
         WM[workspace-member]
         PRM[project-member]
@@ -78,7 +82,7 @@ graph TB
         BC[board-column]
     end
 
-    subgraph L3["L3 任务运行时"]
+    subgraph L3["L3 Task Runtime"]
         TK[task]
         FV[field-value]
     end
@@ -100,20 +104,20 @@ graph TB
     BC --> ST
 ```
 
-### 各层职责
+### Layer Responsibilities
 
 | 层 | 模块 | 说明 |
 |---|---|---|
-| **L0 平台基座** | `platform/` | 多租户、身份、审计、事件、文件存储；与业务 schema 无关 |
-| **L1 元数据注册表** | `schema/` | 可版本化、可模板化；支持项目模板 |
-| **L2 项目运行时** | `project/` | project 实例、成员、视图配置 |
-| **L3 任务运行时** | `task/` | task 实例、字段值 |
+| **L0 Platform** | `platform/` | 多租户、身份、审计、事件、文件存储；与业务 schema 无关 |
+| **L1 Schema Registry** | `schema/` | 可版本化、可模板化；支持项目模板 |
+| **L2 Project Runtime** | `project/` | project 实例、成员、视图配置 |
+| **L3 Task Runtime** | `task/` | task 实例、字段值 |
 
 ---
 
-## 3. 模型清单
+## 3. Model Inventory
 
-### 3.1 L0 平台基座
+### 3.1 L0 Platform
 
 | 模型 | 说明 | MVP |
 |---|---|---|
@@ -127,7 +131,7 @@ graph TB
 
 > `stored-file` 是存储基础设施，不是 task 的子业务实体。task 通过 `field-value(type=attachment)` 引用 `fileId`。
 
-### 3.2 L1 元数据注册表
+### 3.2 L1 Schema Registry
 
 | 模型 | 说明 | MVP |
 |---|---|---|
@@ -140,7 +144,7 @@ graph TB
 | `transition` | 状态流转边：from → to | 是 |
 | `transition-rule` | 流转约束：权限、前置条件、必填字段、自动化 | 二期 |
 
-### 3.3 L2 项目运行时
+### 3.3 L2 Project Runtime
 
 | 模型 | 说明 | MVP |
 |---|---|---|
@@ -153,14 +157,14 @@ graph TB
 | `board-column` | 看板列与 status 的映射 | 是 |
 | `invitation` | 邀请入 workspace / project | 二期 |
 
-### 3.4 L3 任务运行时
+### 3.4 L3 Task Runtime
 
 | 模型 | 说明 | MVP |
 |---|---|---|
 | `task` | 任务实例（含内置列，见第 5 节） | 是 |
 | `field-value` | 任务 / 项目实例上的字段值 | 是 |
 
-### 3.5 仍建议独立的模型（非 field）
+### 3.5 Models That Stay Independent (Not Fields)
 
 | 模型 | 不作为 field 的原因 | 阶段 |
 |---|---|---|
@@ -172,9 +176,9 @@ graph TB
 
 ---
 
-## 4. 字段类型体系（field-type）
+## 4. Field Type System
 
-### 4.1 类型分类
+### 4.1 Type Catalog
 
 | 类别 | field-type | 说明 | value 形态 |
 |---|---|---|---|
@@ -183,27 +187,29 @@ graph TB
 | 人员 | `user`, `user-list` | 负责人、参与者 | user id / id[] |
 | 标签 | `tag` | 标签 | string[] 或 option id[] |
 | 附件 | `attachment` | 文件 | file-ref[] |
-| 迭代 | `sprint` | 所属迭代 | sprint-ref（见 4.4） |
+| 迭代 | `sprint` | 所属迭代 | sprint-ref（见 4.5） |
 | 关系 | `relation` | 父子任务、关联任务 | task-id / task-id[] |
 | 状态 | `status` | 工作流状态 | status-id（存储见第 5 节） |
 
-### 4.2 field-type 注册表结构
+### 4.2 Field Type Registry
 
 ```ts
 interface FieldType {
-  key: string;                         // "tag" | "attachment" | "sprint" | ...
+  key: string;
   label: string;
-  valueSchema: ZodSchema;              // 校验 field-value 结构
-  configSchema: ZodSchema;             // 校验 field-definition.config
-  scopes: ("project" | "task")[];      // 可挂在哪类实体
+  valueSchema: ZodSchema;
+  configSchema: ZodSchema;
+  scopes: ("project" | "task")[];
 
   capabilities?: {
     validate?: (def, value, ctx) => void;
     onChange?: (def, oldVal, newVal, ctx) => DomainEvent[];
-    queryable?: boolean;               // 是否支持筛选 / 排序
+    queryable?: boolean;
   };
 }
 ```
+
+每个 `field-definition` 可配置 `read_point` / `write_point` 权限点（为空则回退实体级权限），详见 [permission-model.md §7](./permission-model.md#7-field-level-authorization)。
 
 ### 4.3 tag
 
@@ -215,17 +221,15 @@ interface FieldType {
   key: "labels",
   type: "tag",
   config: {
-    vocabulary: "project",   // "project" 项目级词表 | "freeform" 自由输入
+    vocabulary: "project",
     allowCreate: true,
-    colorMap: { ... }        // 可选
+    colorMap: { ... }
   }
 }
 
 // field-value
 { value: ["bug", "p0", "backend"] }
 ```
-
-项目级标签词表通过 project 级 `field-definition.options` 或 project 级 `field-value` 维护。
 
 ### 4.4 attachment
 
@@ -285,20 +289,20 @@ interface FieldType {
   type: "sprint",
   config: {
     mode: "ref",
-    catalogField: "sprints",  // 引用 project 上的迭代目录
-    nullable: true             // backlog 任务为 null
+    catalogField: "sprints",
+    nullable: true
   }
 }
 
 // field-value（挂在 task 上）
-{ value: "sp_1" }   // 或 null
+{ value: "sp_1" }   // 或 null（backlog）
 ```
 
 ---
 
-## 5. 内置列 vs field-type 对照
+## 5. Built-in Columns vs Field Types
 
-### 5.1 判定标准
+### 5.1 Criteria
 
 内置列适合同时满足以下条件的属性：
 
@@ -308,7 +312,7 @@ interface FieldType {
 4. 高频变更 + 高频查询
 5. 全产品语义唯一
 
-### 5.2 对照表
+### 5.2 Comparison Table
 
 | 属性 | 存储方式 | 理由 |
 |---|---|---|
@@ -323,7 +327,7 @@ interface FieldType {
 | `sprint` | field-type | 仅敏捷项目使用；可能有 release / milestone 等其他迭代维度 |
 | 其他自定义属性 | field-type + field-value | 由 field-definition 驱动 |
 
-### 5.3 status 混合方案
+### 5.3 status Hybrid Approach
 
 `status` 采用 **语义 field + 存储内置列**：
 
@@ -335,11 +339,11 @@ interface FieldType {
 
 ---
 
-## 6. 关键关系
+## 6. Key Relationships
 
-### 6.1 project-meta 结构
+### 6.1 project-meta Structure
 
-`project-meta` 是模板，不应承载为单一 JSON blob。拆分为：
+`project-meta` 是模板，不应承载为单一 JSON blob：
 
 ```
 project-meta
@@ -349,29 +353,27 @@ project-meta
   └── default-view             # 默认视图配置
 ```
 
-### 6.2 模板快照
+### 6.2 Template Snapshot
 
 - `project-meta` 是**可复用模板**
 - 创建 `project` 时，从 `project-meta` **快照复制**配置到项目级
 - 修改模板**不影响**已建 project
 
-### 6.3 task-meta 与 field-definition
+### 6.3 task-meta and field-definition
 
 多对多关系，通过 `task-meta-field-binding` 关联（可 per-type 覆盖必填、默认值、可见性）。
 
-同一 `field-definition`（如「优先级」）可被多个 `task-meta` 复用。
-
-### 6.4 工作流作用域
+### 6.4 Workflow Scope
 
 | 方案 | 适用阶段 |
 |---|---|
 | workflow 挂在 project-meta / project | MVP 推荐 |
-| workflow 挂在 task-meta | 不同类型不同流转（缺陷 vs 需求） |
+| workflow 挂在 task-meta | 不同类型不同流转 |
 | 两者兼有 | 完整产品阶段 |
 
 MVP：**project 级一个 workflow**；`task-meta` 只决定字段 schema。
 
-### 6.5 成员与权限
+### 6.5 Membership and Authorization
 
 ```
 workspace
@@ -380,38 +382,39 @@ workspace
               └── project-member (可覆盖 role)
 ```
 
-人与 Agent 统一为 `principal`，通过 `api-token` + `scope` 鉴权。
+人与 Agent 统一为 `principal`，通过 `api-token` + scope 鉴权。
+
+资源树与权限判定详见 [permission-model.md](./permission-model.md)。资源层级为 `workspace → project → task`，每个领域实体与 `resources` 表共享主键。
 
 ---
 
-## 7. field-value 存储策略
+## 7. field-value Storage Strategy
 
-### 7.1 混合存储（MVP 推荐）
+### 7.1 Hybrid Storage (MVP)
 
 | 数据 | 存储 |
 |---|---|
 | 内置属性 | `task` 表列 |
-| 自定义属性 | `field-value` 表 或 JSONB |
+| 自定义属性 | `field-value` 表 |
 
-### 7.2 field-value 表结构（建议）
+### 7.2 Suggested Table Structure
 
 ```sql
 field_value (
-  id            ULID PRIMARY KEY,
-  entity_type   TEXT NOT NULL,     -- 'project' | 'task'
-  entity_id     ULID NOT NULL,
-  project_id    ULID NOT NULL,     -- 冗余，方便按项目查询
+  id            TEXT PRIMARY KEY,      -- ULID
+  entity_type   TEXT NOT NULL,         -- 'project' | 'task'
+  entity_id     TEXT NOT NULL,
+  project_id    TEXT NOT NULL,
   field_key     TEXT NOT NULL,
-  value_text    TEXT,              -- 索引友好列（sprint ref、select 等）
-  value_json    JSONB,             -- 完整值（attachment[]、tag[] 等）
+  value_text    TEXT,                  -- 索引友好列
+  value_json    JSONB,
   UNIQUE (entity_type, entity_id, field_key)
 );
 ```
 
-### 7.3 索引示例
+### 7.3 Index Example
 
 ```sql
--- 按 sprint 筛选任务
 CREATE INDEX idx_field_value_sprint
   ON field_value (project_id, field_key, value_text)
   WHERE field_key = 'sprint';
@@ -419,7 +422,7 @@ CREATE INDEX idx_field_value_sprint
 
 ---
 
-## 8. 关键设计决策
+## 8. Key Design Decisions
 
 | # | 决策 | 结论 | 理由 |
 |---|---|---|---|
@@ -434,15 +437,15 @@ CREATE INDEX idx_field_value_sprint
 
 ---
 
-## 9. MVP 最小模型集
+## 9. MVP Model Set
 
 共 20 个模型：
 
 ```
-平台 (7):    workspace, user, principal, api-token, audit-event, domain-event, stored-file
-元数据 (7):  project-meta, task-meta, field-type, field-definition, workflow, status, transition
-项目 (5):    project, workspace-member, project-member, view, board-column
-任务 (2):    task, field-value
+Platform (7):  workspace, user, principal, api-token, audit-event, domain-event, stored-file
+Schema (7):    project-meta, task-meta, field-type, field-definition, workflow, status, transition
+Project (5):   project, workspace-member, project-member, view, board-column
+Task (2):      task, field-value
 ```
 
 MVP field-type：
@@ -451,7 +454,7 @@ MVP field-type：
 text, number, date, select, user, tag, attachment, sprint, status
 ```
 
-二期扩展：
+Phase 2：
 
 ```
 transition-rule, comment, task-relation, notification, invitation, relation
@@ -459,9 +462,9 @@ transition-rule, comment, task-relation, notification, invitation, relation
 
 ---
 
-## 10. 代码模块拆分
+## 10. Code Module Layout
 
-对应 [技术选型](./技术选型.md) 中的 monorepo 规划：
+对应 [tech-stack.md](./tech-stack.md) 中的 monorepo 规划：
 
 ```
 packages/core/src/domain/
@@ -469,7 +472,7 @@ packages/core/src/domain/
   schema/         # project-meta, task-meta, field-*, workflow, status, transition
   project/        # project, member, view, board-column
   task/           # task, field-value
-  capability/     # 能力注册表（调用 domain service）
+  capability/     # Capability Registry
 
 packages/shared/
   schemas/        # Zod schema，与 Drizzle table 按聚合根对应
@@ -477,7 +480,7 @@ packages/shared/
 
 ---
 
-## 11. 实体关系总览
+## 11. Entity Relationship Diagram
 
 ```mermaid
 erDiagram
@@ -515,7 +518,7 @@ erDiagram
 
 ---
 
-## 12. 待确认事项
+## 12. Open Questions
 
 1. **assignee 单人 vs 多人**：MVP 内置列单人，还是直接用 `field-type: user-list`？
 2. **field-value 行存 vs JSONB 列**：是否在 `task` 上额外加 `custom_fields JSONB` 作为读优化？
@@ -524,8 +527,9 @@ erDiagram
 
 ---
 
-## 附录：变更记录
+## Changelog
 
-| 日期 | 变更 |
+| Date | Change |
 |---|---|
-| 2026-07-16 | 初稿：确立 meta/instance 分层、field 体系、内置列策略 |
+| 2026-07-16 | 初稿：meta/instance 分层、field 体系、内置列策略 |
+| 2026-07-19 | 重命名为 `data-model.md`，对齐权限模型术语 |
